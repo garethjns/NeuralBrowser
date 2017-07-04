@@ -244,9 +244,11 @@ classdef SpatialMethods
                 ll = 'L ' + string(leg)';
                 lr = 'R ' + string(leg)';
                 leg = [ll,lr];
-                leg = [leg(1,:), leg(2,:)];
+                if size(leg,1)>1
+                    leg = [leg(1,:), leg(2,:)];
+                end
             end
-               
+            
             legend(leftAxes, leg)
             
         end
