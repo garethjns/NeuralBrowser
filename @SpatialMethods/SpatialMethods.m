@@ -1,16 +1,26 @@
 classdef SpatialMethods
+    % Functions from inside SpatialNeuralBrowser.mlapp. Includes callbacks.
+    % Requires NeuralAnalysis library.
+    % TO DO:
+    % - Add batch processing functions
+    % - Move out generic functions to seperate class for use with Temporal
+    % interface, if created.
     
     properties
     end
+
+    methods
+    end
+    
     methods (Static)
         
         function toggleSelectDataPanel(app, str)
+            % Enable SelectDataPanel
             app.TrialTable.Enable = str;
             app.TrialSlider.Enable = str;
             app.ChannelKnob.Enable = str;
             % app.FiltSwitch.Enable = str;
             % app.PlotButton.Enable = str;
-            
         end
         
         function updatePlots(app,n,c)
@@ -18,6 +28,7 @@ classdef SpatialMethods
             % Clear all plots
             % Plot Filtered and LFP
             % (leave spikes for update button)
+            % No longer used?
             
             SpatialMethods.plotFilt(app,n,c)
             SpatialMethods.plotLFP(app,n,c)
@@ -34,24 +45,25 @@ classdef SpatialMethods
         end
         
         function plotFilt(app,n,c)
+            % Plot filtered trace on appropriate axes
             plot(app.FilteredTraceAxes, app.tvFEpoch, app.fEpoch(:,c,n))
         end
         
         function plotStim(app, n, c)
+            % Plot Stim on appropriate axes on Stim tab.
+            % No epoch alignment.
             
-            % Plot on Stim tab
-            % No buffering
-            
-            
+            % Clear all axes
             cla(app.StimLAAxes)
             cla(app.StimRAAxes)
             cla(app.StimLVAxes)
             cla(app.StimRVAxes)
             
-            
+            % Get trial type
             TT = app.Trials.TT(n,:);
+            
+            % Plot auditory
             if  TT==2 || TT==4 || TT==5
-                
                 % Generate
                 stimLA = Church2(app.stims{1,1,n});
                 % Plot
@@ -59,25 +71,23 @@ classdef SpatialMethods
                 
                 stimRA = Church2(app.stims{1,2,n});
                 plot(app.StimRAAxes, stimRA.sound, 'Color', app.gCols(1,:))
-                
-            else
-                
+
             end
             
-            
+            % Plot visual
             if TT==3 || TT==4 || TT==5
                 stimLV = Church2(app.stims{2,1,n});
                 plot(app.StimLVAxes, stimLV.sound, 'Color', app.gCols(2,:))
                 
                 stimRV = Church2(app.stims{2,2,n});
                 plot(app.StimRVAxes, stimRV.sound, 'Color', app.gCols(2,:))
-            else
-                
             end
-
         end
         
         function plotLFP(app, n, c)
+            % Plot LFP on LFP tab
+            
+            % Get global mean norm switch value
             switch app.GMNSwitch.Value
                 case 'On'
                     norm = true;
@@ -85,8 +95,10 @@ classdef SpatialMethods
                     norm = false;
             end
             
+            % Get epoch
             plotData = app.lfpEpoch(:,c,n);
             
+            % Normalise if on
             if norm
                 plotData = plotData - int16(mean(...
                     app.lfpEpoch(:,~((1:size(app.lfpEpoch,2))==c),n), 2));
@@ -102,28 +114,26 @@ classdef SpatialMethods
         end
         
         function [spikes, artThresh, eventThresh] = calcSpikes(app,n,c)
-            % Calculate spikes using paramters, plot
-            
-            % Get channel and n
-            % c = round(app.ChannelKnob.Value);
-            % n = round(app.TrialSlider.Value);
+            % Calculate spikes using paramters.
             
             % Get method using selected method
             switch app.KButton.Value
                 case 1
                     method = @NeuralPP.eventDetectK;
                     
+                    % Get slider values
                     params.medThresh = round(app.MedThreshSlider.Value);
                     params.artThresh = round(app.RejThreshSlider.Value);
                     params.eventThresh = round(app.EvThreshSlider.Value);
                     params.plotOn = false;
+                    
+                    % Calc spikes
                     [spikes, artThresh] = method(app.fEpoch(:,c,n), ...
                         params);
                     
                     eventThresh = params.eventThresh;
                     
-                    
-                case 0
+                case 0 % 'G' - No point in using? Not implemented
                     params.thresh = [3 40];
                     params.reject = [5 50];
                     params.plotOn = false;
@@ -133,10 +143,10 @@ classdef SpatialMethods
                     artThresh = 0;
                     eventThresh = params.thresh(3);
             end
-            
         end
         
         function plotSpikes(app, spikes, artThresh, eventThresh, n, c)
+            % Plot spikes on spikes tab
             
             hold(app.SpikesAxes, 'off')
             plot(app.SpikesAxes, app.tvFEpoch, app.fEpoch(:,c,n), ...
@@ -157,16 +167,22 @@ classdef SpatialMethods
         end
         
         function [PSTH, tVec] = calcPSTH(app, raster)
+            % Calculate single-trial PSTH using specified time bin.
+            
+            % Get bin size
             binSize = round(app.TimeBinSlider.Value);
             
+            % Calc PSTH
             [PSTH, ~] = NeuralAnalysis.PSTH(raster, app.fs1, binSize);
             
-            % Generate tVec for this length of PSTH
+            % Generate tVec for this length of PSTH (rather than using
+            % returned time vec)
             tVec = linspace(app.EpochPreTime.Value, ...
                 app.EpochPostTime.Value, length(PSTH));
         end
         
         function plotPSTH(app, tVec, PSTH, n, c)
+            % Plot PSTH and stim (aligned) on PSTH tab
             
             % Plot PSTH
             plot(app.PSTHAxesPSTH, tVec, PSTH);
@@ -174,24 +190,29 @@ classdef SpatialMethods
             % Plot stim on this tab
             SpatialMethods.plotStimOnAxes(app, app.PSTHAxesStimLeft, ...
                 app.PSTHAxesStimRight, n)
-            
         end
         
         function plotStimOnAxes(app, leftAxes, rightAxes, n)
+            % Plot stim on appropriate axes, assuming axis for each side.
+            % Align stims to epoch.
 
             % Get times for alignmet
             preTime = app.EpochPreTime.Value;
             postTime = app.EpochPostTime.Value;
             
+            % Clear axes
             cla(leftAxes)
             cla(rightAxes)
             hold(leftAxes, 'on')
             hold(rightAxes, 'on')
-
+            
+            % Get trial type
             TT = app.Trials.TT(n,:);
             
+            % Prepare legend
             leg = {};
             
+            % Prepare colours
             % If all to same axis
             % Adjust colours
             if leftAxes==rightAxes
@@ -205,13 +226,15 @@ classdef SpatialMethods
                 c3 = 2;
                 c4 = 2;
             end
-
+            
+            % Plot auditory stim
             if TT==2 || TT==4 || TT==5
                 % Plot top, left stim
                 % Generate
                 stimLA = Church2(app.stims{1,1,n});
                 [yBuff, x] = NeuralAnalysis.bufferY(stimLA.sound, ...
                     app.fs4, preTime, postTime, 0);
+                
                 % Plot
                 plot(leftAxes, x, yBuff, 'Color', app.gCols(c1,:))
                 
@@ -224,8 +247,8 @@ classdef SpatialMethods
                 leg = [leg, 'Auditory'];
             end
             
+            % Plot visual stim
             if TT==3 || TT==4 || TT==5
-                
                 stimLV = Church2(app.stims{2,1,n});
                 [yBuff, x] = NeuralAnalysis.bufferY(stimLV.sound, ...
                     app.fs4, preTime, postTime, 0);
@@ -249,25 +272,30 @@ classdef SpatialMethods
                 end
             end
             
+            % Add legend
             legend(leftAxes, leg)
             
         end
         
-        
         function [raster, tVec] = calcRaster(app, spikes)
+            % Calc raster - single trial at the moment, and won't display
+            % properly in axes
             [raster, tVec] = NeuralAnalysis.raster(spikes, app.fs1);
         end
         
         function plotRaster(app, raster, n, c)
-            
+            % Plot stim (aligned) and raster on raster tab
+            % Doesn't display properly in this axes
             imagesc(app.RasterAxesRaster, double(raster));
             
+            % Plot aligned stim
             SpatialMethods.plotStimOnAxes(app, app.RasterAxesStimLeft, ...
                 app.RasterAxesStimRight, n)
             
         end
         
         function app = startupFcn(app)
+            % Startup function
                        
             % Populate available blocks in processing folder
             fn = [pwd, '\Preprocessing\*block*'];
@@ -279,7 +307,7 @@ classdef SpatialMethods
         end
         
         
-          % CALLBACKS
+        % CALLBACKS
         function app = NeuralLoadButtonPushed(app, event)
              % Extract specified directory to \Extracted\ using TDTHelper
             % Process using Neural
@@ -380,14 +408,18 @@ classdef SpatialMethods
         end
         
         function app = NeuralBrowseButtonPushed(app, event)
-                        fn = uigetdir;
+            % Open file browser to find block folder
+            
+            fn = uigetdir;
             if ischar(fn)
                 app.NeuralPathEditField.Value = fn;
             end
         end
         
         function app = BehavBrowseButtonPushed(app, event)
-                        [fn, pn] = uigetfile;
+            % Open file brower to get behavioural file
+            
+            [fn, pn] = uigetfile;
             if ischar(fn)
                 app.BehaviouralEditField.Value = fn;
                 app.behavPath = pn;
@@ -395,6 +427,8 @@ classdef SpatialMethods
         end
         
         function app = BehavLoadButtonPushed(app, event)
+            % Run on load
+            
             % Reset lamp and gauge
             app.BehavLoadButton.Enable = 'off';
             app.BehaviouralLamp.Color = [0.9, 0.9, 0.2];
@@ -404,7 +438,6 @@ classdef SpatialMethods
             % Check behavioural file matches block
             block = string(app.BlockDropDown.Value);
             bFn = string(app.BehaviouralEditField.Value);
-            
             if ~bFn.contains(block)
                 app.NeuralLamp.Color = [0.9, 0, 0];
             end
@@ -412,7 +445,6 @@ classdef SpatialMethods
             % Load behavioural file
             data = load([app.behavPath, bFn.char()]);
             data = data.saveData(2:end);
-            
             app.BlockGauge.Value = 10;
             
             % Do basic processing of behav data to table
@@ -432,19 +464,24 @@ classdef SpatialMethods
                 NaN(nTrials,2), 'speakers', ''};
             nVars = size(vars,1);
             disp(vars)
-            
-            
+
             trials = table(vars{:,1});
             trials.Properties.VariableNames = vars(:,2);
             trials.Properties.VariableDescriptions = vars(:,3);
             stimObjects = cell(2,2,nTrials);
             
+            % There's a bug here where preallocation isn't working
+            % correctly. Not sure why - seems to import ok.
             for n = 1:nTrials
                 disp(n)
                 for v = 1:nVars
+                    % Need to extract data from struct depending on
+                    % type/shape
                     if isa(data{n}.(vars{v,2}), 'char')
+                        % {}
                         trials.(vars{v,2}){n} = data{n}.(vars{v,2});
                     else
+                        % ()
                         trials.(vars{v,2})(n,:) = data{n}.(vars{v,2});
                     end
                 end
@@ -453,6 +490,7 @@ classdef SpatialMethods
                 stimObjects(:,:,n) = data{n}.stimRecord;
             end
             
+            % Save stims to app for easy access
             app.stims = stimObjects;
             clear stimObjects
             
@@ -463,18 +501,18 @@ classdef SpatialMethods
             
             app.BlockGauge.Value = 30;
             
-            
             % Check if neural data already processed up to spikes
             pPath = [pwd, '\Preprocessing\'];
             if ~exist('pPath', 'dir')
                 mkdir(pPath)
             end
             
+            % Check if data has already been epoched
             fn = [pPath, block.char(), '\Epoched.mat'];
             params.EpochPreTime = app.EpochPreTime.Value;
             params.EpochPostTime = app.EpochPostTime.Value;
             if ~exist(fn, 'file')
-                % If not, load processed data
+                % If it hasn't, load processed data and epoch
                 
                 % BB2
                 BB2 = load([pPath, block.char(), '\BB2.mat']);
@@ -488,13 +526,12 @@ classdef SpatialMethods
                 % Clean
                 fEpochBB2 = NeuralPP.clean(fEpochBB2);
                 app.BlockGauge.Value = 60;
-                
                 clear BB2
                 
                 % BB3
                 BB3 = load([pPath, block.char(), '\BB3.mat']);
+
                 % Epoch
-                
                 fEpochBB3 = NeuralPP.epochData(params, ...
                     trials.startTrialTime, BB3.fData, app.fs1);
                 lfpEpochBB3 = NeuralPP.epochData(params, ...
@@ -503,9 +540,7 @@ classdef SpatialMethods
                 % Clean
                 fEpochBB3 = NeuralPP.clean(fEpochBB3);
                 app.BlockGauge.Value = 90;
-                
                 clear BB3
-                
                 
                 % Concatenate BB2 and BB3
                 fEpoch = [fEpochBB2, fEpochBB3];
@@ -517,24 +552,24 @@ classdef SpatialMethods
                 app.BlockGauge.Value = 100;
                 
             else
-                % Load existing file
+                % Load existing epoch file
                 load(fn);
                 app.BlockGauge.Value = 100;
             end
             
-            
+            % Save time vectors for LFP and BP data to app for easy access
             app.tvFEpoch = linspace(params.EpochPreTime, ...
                 params.EpochPostTime, size(fEpoch,1));
             app.tvLfpEpoch = linspace(params.EpochPreTime, ...
                 params.EpochPostTime, size(lfpEpoch,1));
             
+            % Also save actual neural data to app for easy access - this
+            % doesn't seem to cause noticable performance problems
             app.fEpoch = fEpoch;
             app.lfpEpoch = lfpEpoch;
-            
             app.BehaviouralLamp.Color = [0, 0.9, 0];
             
             % Update trial viewer
-            
             app.TrialSlider.Limits = [1, nTrials];
             SpatialMethods.TrialSliderValueChanged(app, event)
             
@@ -544,58 +579,82 @@ classdef SpatialMethods
         end
             
         function app = ChannelKnobValueChanged(app, event)
+            % Run on channel selection change
+            
+            % Get value
             value = round(app.ChannelKnob.Value);
             
+            % Set major tick labels to this combination to display "1" and
+            % "32" correctly
             app.ChannelKnob.MajorTickLabels = {'1', '32', '63'};
             app.ChannelKnob.MajorTicks = [1, 32, 63];
+            
+            % Then add the current selection to the tick labels so choice
+            % is obvious
             if value>1 && value<32
                 app.ChannelKnob.MajorTickLabels = ...
                     {'1', num2str(value), '32', '63'};
                 app.ChannelKnob.MajorTicks = [1, value, 32, 63];
             end
             
+            % Recalc and replot current tab
             app = SpatialMethods.ViewGroupSelectionChanged(app, event);
         end
         
-        
         function app = ViewGroupSelectionChanged(app, event)
+            % This function relacs and replots for currentely selected view
+            % tab
+            
+            % Get tab, trial, channel info
             selectedTab = app.ViewGroup.SelectedTab;
             n = round(app.TrialSlider.Value);
             c = round(app.ChannelKnob.Value);
             
+            % Switch of slected tab to limit processing to current only
             switch selectedTab.Title
                 case 'Filtered trace'
+                    % Plot the filtered trace
                     SpatialMethods.plotFilt(app, n, c)
+                    
                 case 'Spikes'
+                    % Calc and plot spikes
                     [spikes, artThresh, eventThresh] = ...
                         SpatialMethods.calcSpikes(app,n,c);
                     SpatialMethods.plotSpikes(app, spikes, ...
                         artThresh, eventThresh, n, c);
                     
                 case 'LFP'
+                    % Plot LFP
                     SpatialMethods.plotLFP(app, n, c);
                     
                 case 'Stim'
+                    % Plot unaliged stim on seperate axes
                     SpatialMethods.plotStim(app, n, c);
                     
                 case 'Raster'
+                    % Calc spikes, calc and plot the pointless raster
                     spikes = SpatialMethods.calcSpikes(app, n, c);
                     raster = SpatialMethods.calcRaster(app, spikes);
                     SpatialMethods.plotRaster(app, raster, n, c);
                     
                 case 'PSTH'
+                    % Calc spikes, calc raster, calc and plot PSTH
                     [spikes, artThresh, eventThresh] = ...
                         SpatialMethods.calcSpikes(app, n, c);
+                    % And plot spikes??
                     SpatialMethods.plotSpikes(app, spikes, ...
                         artThresh, eventThresh, n, c);
+                    
                     raster = SpatialMethods.calcRaster(app, spikes);
+                    
                     [PSTH, tVec] = SpatialMethods.calcPSTH(app, raster);
                     SpatialMethods.plotPSTH(app, tVec, PSTH, n,c);
-                    
             end
         end
         
         function app = TrialSliderValueChanged(app, event)
+            % Run on trial selction change
+            
             trials = app.Trials;
             
             % Get selected trial
@@ -603,11 +662,11 @@ classdef SpatialMethods
             
             % Run through columns in trials and convert and non-[1, 1] 
             % to multiple columns
+            % Drop anything that can't be displayed in UI element
             m = width(trials);
             dropList = {};
             newTable = table();
             for c = 1:m
-                
                 m2 = size(trials{:,c},2);
                 if m2>1
                     dropList = [dropList, ...
@@ -619,16 +678,17 @@ classdef SpatialMethods
                         newTable.(newName) = trials{:,c}(:,c2);
                     end
                 end
-                
-                
+
             end
 
             trials(:,dropList) = [];
             trials = [trials, newTable];
             
+            % Update table
             app.TrialTable.Data = table2cell(trials(n,:));
             app.TrialTable.ColumnName = trials.Properties.VariableNames;
             
+            % And clac/plot current view tab
             SpatialMethods.ViewGroupSelectionChanged(app, event)
         end
         
