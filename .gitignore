@@ -21,6 +21,10 @@ $RECYCLE.BIN/
 Extracted/
 Preprocessing/
 
+# MATLAB
+*.asv
+*.fig
+*.mat
 # =========================
 # Operating System Files
 # =========================

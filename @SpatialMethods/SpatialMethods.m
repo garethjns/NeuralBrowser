@@ -47,6 +47,10 @@ classdef SpatialMethods
         function plotFilt(app,n,c)
             % Plot filtered trace on appropriate axes
             plot(app.FilteredTraceAxes, app.tvFEpoch, app.fEpoch(:,c,n))
+            
+            % Plot stim on this tab
+            SpatialMethods.plotStimOnAxes(app, ...
+                app.FTStimAxes, app.FTStimAxes, n)
         end
         
         function plotStim(app, n, c)
@@ -309,7 +313,7 @@ classdef SpatialMethods
         
         % CALLBACKS
         function app = NeuralLoadButtonPushed(app, event)
-             % Extract specified directory to \Extracted\ using TDTHelper
+            % Extract specified directory to \Extracted\ using TDTHelper
             % Process using Neural
             
             % Reset lamp and gauge
@@ -370,7 +374,8 @@ classdef SpatialMethods
                 BB2 = TDT.loadEvID('BB_2');
                 app.NeuralGauge.Value = 30;
                 
-                [fData, lfpData] = NeuralPP.filter(BB2, app.fs1);
+                [fData, lfpData] = ...
+                    NeuralPP.filter(BB2, app.fs1, app.MemCheckBox.Value);
                 app.NeuralGauge.Value = 50;
                 
                 save(fn, 'fData', 'lfpData')
@@ -387,7 +392,8 @@ classdef SpatialMethods
                 BB3 = TDT.loadEvID('BB_3');
                 app.NeuralGauge.Value = 70;
                 
-                [fData, lfpData] = NeuralPP.filter(BB3, app.fs1);
+                [fData, lfpData] = ...
+                    NeuralPP.filter(BB3, app.fs1, app.MemCheckBox.Value);
                 app.NeuralGauge.Value = 90;
                 
                 save(fn, 'fData', 'lfpData')
@@ -405,6 +411,8 @@ classdef SpatialMethods
                 nItems = numel(app.BlockDropDown.Items);
                 app.BlockDropDown.Items{nItems} = block.char();
             end
+            
+            app.NeuralLoadButton.Enable = 'on';
         end
         
         function app = NeuralBrowseButtonPushed(app, event)
