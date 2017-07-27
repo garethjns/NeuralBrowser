@@ -8,7 +8,7 @@ classdef SpatialMethods
     
     properties
     end
-
+    
     methods
     end
     
@@ -75,7 +75,7 @@ classdef SpatialMethods
                 
                 stimRA = Church2(app.stims{1,2,n});
                 plot(app.StimRAAxes, stimRA.sound, 'Color', app.gCols(1,:))
-
+                
             end
             
             % Plot visual
@@ -199,7 +199,7 @@ classdef SpatialMethods
         function plotStimOnAxes(app, leftAxes, rightAxes, n)
             % Plot stim on appropriate axes, assuming axis for each side.
             % Align stims to epoch.
-
+            
             % Get times for alignmet
             preTime = app.EpochPreTime.Value;
             postTime = app.EpochPostTime.Value;
@@ -300,13 +300,13 @@ classdef SpatialMethods
         
         function app = startupFcn(app)
             % Startup function
-                       
+            
             % Populate available blocks in processing folder
             fn = [pwd, '\Preprocessing\*block*'];
             blocks = dir(fn);
             for b = 1:numel(blocks)
                 app.BlockDropDown.Items{b} = blocks(b).name;
-            end 
+            end
             
         end
         
@@ -472,14 +472,13 @@ classdef SpatialMethods
                 NaN(nTrials,2), 'speakers', ''};
             nVars = size(vars,1);
             disp(vars)
-
+            
             trials = table(vars{:,1});
             trials.Properties.VariableNames = vars(:,2);
             trials.Properties.VariableDescriptions = vars(:,3);
             stimObjects = cell(2,2,nTrials);
             
-            % There's a bug here where preallocation isn't working
-            % correctly. Not sure why - seems to import ok.
+            % For all trials
             for n = 1:nTrials
                 disp(n)
                 for v = 1:nVars
@@ -490,12 +489,44 @@ classdef SpatialMethods
                         trials.(vars{v,2}){n} = data{n}.(vars{v,2});
                     else
                         % ()
-                        trials.(vars{v,2})(n,:) = data{n}.(vars{v,2});
+                        if ~isempty(data{n}.(vars{v,2}))
+                            trials.(vars{v,2})(n,:) = data{n}.(vars{v,2});
+                        end
                     end
                 end
                 
                 % Collet stim objects to save in app.stims
                 stimObjects(:,:,n) = data{n}.stimRecord;
+                
+                % Check level - gf.level unreliable
+                is10 = bFn.extractBetween('level','_Rio') == '10Test';
+                
+                if is10 && (data{n}.TT==4 || data{n}.TT==5)
+                    % There's a bug that affected saving of AV stim - vis
+                    % cleared a in stimRecord. Regenerate the missing cfgs.
+                    rCfg = SpatialMethods.regenCfg(data{n}, ...
+                        data{n}.stimRecord);
+                    
+                    % Verify using vis
+                    if 0
+                        LV = Church2(data{n}.stimRecord{2,1});
+                        RV = Church2(data{n}.stimRecord{2,2});
+                        nLV = Church2(rCfg{2,1});
+                        nRV = Church2(rCfg{2,2});
+                        figure
+                        subplot(1,2,1)
+                        plot(LV.sound)
+                        hold on
+                        plot(RV.sound)
+                        subplot(1,2,2)
+                        plot(nLV.sound)
+                        hold on
+                        plot(nRV.sound)
+                    end
+                    
+                    % Add this side's regrenerated A to stimRecord
+                    stimObjects(1,:,n) = rCfg(1,:);
+                end
             end
             
             % Save stims to app for easy access
@@ -538,7 +569,7 @@ classdef SpatialMethods
                 
                 % BB3
                 BB3 = load([pPath, block.char(), '\BB3.mat']);
-
+                
                 % Epoch
                 fEpochBB3 = NeuralPP.epochData(params, ...
                     trials.startTrialTime, BB3.fData, app.fs1);
@@ -585,7 +616,149 @@ classdef SpatialMethods
             SpatialMethods.toggleSelectDataPanel(app, 'on')
             app.BehavLoadButton.Enable = 'on';
         end
+        
+        function stimRecord = regenCfg(gf, stimRecord)
+            % Regenerate missing auditory cfgs from incomplete stimRecord
+            % and gf snapshot
+            % Get:
+            % - common settings from gf
+            % - Side specific settings from visual stims in stimRecord
+            %
+            % Retruns complete stimRecord with regenerated V stimuli as
+            % well. These can/should be used for verification in calling
+            % function!
+            %
+            % Undoes this bug in level 10:
+            %
+            %-------------------
+            % .... [Generate] ....
+            % if isstruct(aStim)
+            %    soundLR(1:length(aStim.sound),i) = ...
+            %        aStim.sound';
+            %    aStim = rmfield(aStim, 'sound');
+            %     gf.stimRecord{1,i}=aStim;
+            %     gf.stimRecord{2,i}=NaN;     <---- Clear previous
+            % end
+            % if isstruct(vStim)
+            %     lightLR(1:length(vStim.sound),i) = ...
+            %         (vStim.sound*gf.vMulti)';
+            %     vStim = rmfield(vStim, 'sound');
+            %     gf.stimRecord{2,i}=vStim;
+            %     gf.stimRecord{1,i}=NaN;    <---- Clear A just set
+            % end
+            % --------------------
             
+            % Therefore, (may) need to recreate A stim cfg while
+            % loading
+            % Relevant info should be in gf, snapshot saved in trial
+            % information
+            
+            % Missing gf.rideNoise?
+            % Get from other stim objects
+            gf.rideNoise = stimRecord{2,1}.rideNoise;
+            % nEvents also not saved in gf, get from corresponding
+            % vis for each side:
+            eV = [stimRecord{2,1}.nEvents, ...
+                stimRecord{2,2}.nEvents];
+            
+            for s = 1:2
+                
+                % Common parameters
+                % p=gf.speakers(i);
+                % (here left=8 and right=2, so ev processed in correct order)
+                cfg.nEvents = eV(s);
+                cfg.cutOff = gf.cutOff;
+                cfg.eventMag = gf.eventMag;
+                cfg.gap1 = gf.gap1;
+                cfg.gap2 = gf.gap2;
+                cfg.Fs = gf.fStim;
+                cfg.eventType = gf.eventType;
+                cfg.rise = gf.stimRise;
+                cfg.duration = gf.duration;
+                cfg.noiseType = 'multipleBlocks';
+                cfg.rideNoise = gf.rideNoise;
+                cfg.dispWarn = 0;
+                
+                
+                % Using code from level10Test_WE.m
+                switch gf.TT
+                    case 4 % Sync
+                        cfg.type = 'Aud';
+                        cfg.rise = gf.stimRise;
+                        cfg.engBuff = gf.endBuff;
+                        cfg.startBuff = gf.startBuff;
+                        cfg.noiseMag = gf.aNoise;
+                        cfg.rideNoise = gf.rideNoise;
+                        % Seed
+                        cfg.seed = gf.seeds(3,1);
+                        
+                        aStim = Church2(cfg);
+                        
+                        % Keep cfg, replace V fields
+                        cfg.type = 'Vis';
+                        cfg.eventType = 'flat';
+                        cfg.noiseMag = gf.vNoise;
+                        cfg.eventMag = gf.vRange;
+                        % Seed
+                        cfg.seed = gf.seeds(3,2); % (Same as A)
+                        
+                        %
+                        vStim = Church2(cfg);
+                    case 5 % Async
+                        
+                        cfg.type = 'Aud';
+                        cfg.engBuff = gf.endBuff;
+                        cfg.startBuff = gf.startBuff;
+                        cfg.noiseMag = gf.aNoise;
+                        cfg.rideNoise = gf.rideNoise;
+                        % Seed
+                        cfg.seed = gf.seeds(4,1);
+                        
+                        aStim = Church2(cfg);
+                        
+                        clear cfg
+                        
+                        % Re-set common
+                        cfg.Fs = gf.fStim; % Sampling rate
+                        cfg.eventLength = gf.stimEventDuration;
+                        % cfg.mag = 0-gf.atten;
+                        cfg.eventType = gf.eventType;
+                        cfg.gap1 = gf.gap1; % Gap durations
+                        cfg.gap2 = gf.gap2;
+                        cfg.duration=gf.duration;
+                        cfg.cutOff=gf.cutOff;
+                        cfg.eventFreq = ...
+                            gf.eventFreq; % If 'sine', frequency
+                        cfg.noiseType='multipleBlocks';
+                        cfg.rise=gf.stimRise;
+                        cfg.rideNoise=gf.rideNoise;
+                        
+                        % Disabled - don't want to reset in regen code,
+                        % rather just use existing value
+                        % Select variable offset
+                        % gf.aysncOffset = ...
+                        %     gf.asyncOffsets(randi(numel(...
+                        %     gf.asyncOffsets)));
+                        
+                        % Set specific
+                        cfg.type = 'Vis';
+                        cfg.eventType = 'flat';
+                        cfg.eventMag = gf.vRange;      % From above
+                        cfg.endBuff = gf.endBuff + gf.aysncOffset;
+                        cfg.startBuff = gf.startBuff + gf.aysncOffset;
+                        cfg.noiseMag = gf.vNoise;
+                        % Seed
+                        cfg.seed = gf.seeds(4,2);
+                        
+                        vStim=Church2(cfg);
+                end
+                
+                stimRecord{1,s} = rmfield(aStim, 'sound');
+                stimRecord{2,s} = rmfield(vStim, 'sound');
+            end
+            
+        end
+        
         function app = ChannelKnobValueChanged(app, event)
             % Run on channel selection change
             
@@ -668,7 +841,7 @@ classdef SpatialMethods
             % Get selected trial
             n = round(app.TrialSlider.Value);
             
-            % Run through columns in trials and convert and non-[1, 1] 
+            % Run through columns in trials and convert and non-[1, 1]
             % to multiple columns
             % Drop anything that can't be displayed in UI element
             m = width(trials);
@@ -686,9 +859,9 @@ classdef SpatialMethods
                         newTable.(newName) = trials{:,c}(:,c2);
                     end
                 end
-
+                
             end
-
+            
             trials(:,dropList) = [];
             trials = [trials, newTable];
             
@@ -700,5 +873,6 @@ classdef SpatialMethods
             SpatialMethods.ViewGroupSelectionChanged(app, event)
         end
         
+
     end
 end
